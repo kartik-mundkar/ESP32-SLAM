@@ -13,6 +13,7 @@ public:
 
 private:
     BluetoothSerial btSerial;
+    String deviceName;
 };
 
 #endif // BLUETOOTH_H

@@ -1,28 +1,35 @@
 #include "../include/bluetooth.h"
 
-BluetoothSerial bt;  // Create only one instance globally
+BluetoothHandler::BluetoothHandler(const String &deviceName)
+    : deviceName(deviceName) {}
 
-void setupBluetooth() {
-    if (!bt.begin("ESP32-SLAM")) {  // Set Bluetooth device name
-        Serial.println("Bluetooth failed to start");
-        return;
+void BluetoothHandler::begin() {
+    btSerial.begin(deviceName);
+    delay(1000);
+
+    if (!btSerial.connected()) {
+        Serial.println("Bluetooth initialized, but no devices connected.");
+    } else {
+        Serial.println("Bluetooth Started Successfully: " + deviceName);
     }
-    Serial.println("Bluetooth Started: ESP32-SLAM");
 }
 
-void sendBluetoothData(String data) {
-    bt.println(data);  // Send data over Bluetooth
+void BluetoothHandler::sendData(const String &data) {
+    if (btSerial.connected()) {
+        btSerial.println(data);
+        Serial.print("Sent via Bluetooth: ");
+        Serial.println(data);
+    } else {
+        Serial.println("Bluetooth not connected. Data not sent.");
+    }
 }
 
-String receiveBluetoothData() {
-    if (bt.available()) {  // Check if data is available
-        String receivedData = "";
-        while (bt.available()) {
-            char c = bt.read();
-            receivedData += c;
-        }
-        Serial.println("Received via Bluetooth: " + receivedData);
-        return receivedData;
+bool BluetoothHandler::receiveData(String &data) {
+    if (btSerial.available()) {
+        data = btSerial.readString(); // Improved data handling
+        data.trim();                  // Removes excess spaces/newlines
+        Serial.println("Received via Bluetooth: " + data);
+        return true;
     }
-    return "";
+    return false;
 }
