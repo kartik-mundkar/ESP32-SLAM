@@ -10,6 +10,7 @@ public:
     void begin();
     void sendData(const String &data);
     bool receiveData(String &data);
+    bool isConnected();
 
 private:
     BluetoothSerial btSerial;
