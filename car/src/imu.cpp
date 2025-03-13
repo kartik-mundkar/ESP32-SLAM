@@ -1,11 +1,12 @@
 #include "../include/imu.h"
+#include "config.h"
 
 // Constructor
 IMUSensor::IMUSensor() : accAngleX(0), accAngleY(0), gyroAngleX(0), gyroAngleY(0), prevTime(0) {}
 
 // Initialize MPU9250 sensor
 void IMUSensor::begin() {
-    Wire.begin();
+    Wire.begin(SDA_PIN, SCL_PIN, I2C_CLOCK_SPEED);
     mpu.setWire(&Wire);  // Set I2C wire instance for MPU9250_asukiaaa library
 
     uint8_t sensorId;

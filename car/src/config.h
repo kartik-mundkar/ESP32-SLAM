@@ -13,4 +13,8 @@
 //Servo pin configuration
 #define SERVO_PIN 13
 
-//imu pin configuration 
+//imu pin configuration -> default SDA (21) and SCL (22) pins 
+#define SDA_PIN 21
+#define SCL_PIN 22 
+#define I2C_CLOCK_SPEED 400000 
+
