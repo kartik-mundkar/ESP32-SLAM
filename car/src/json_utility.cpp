@@ -6,7 +6,7 @@ String JsonUtility::createJson(std::initializer_list<std::pair<String, String>> 
                                std::initializer_list<std::pair<String, int>> intData,
                                std::initializer_list<std::pair<String, float>> floatData,
                                std::initializer_list<std::pair<String, bool>> boolData) {
-    StaticJsonDocument<JSON_BUFFER_SIZE> jsonDoc;
+    JsonDocument jsonDoc;
 
     // Adding string data
     for (const auto& entry : stringData) {
