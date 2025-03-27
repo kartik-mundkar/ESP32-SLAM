@@ -1,5 +1,5 @@
-#ifndef SERVO_MOTOR_H
-#define SERVO_MOTOR_H
+#ifndef ESP32_SLAM_SERVO_MOTOR_H
+#define ESP32_SLAM_SERVO_MOTOR_H
 
 #include <Arduino.h>
 #include <ESP32Servo.h>  // ESP32 requires this library for servo control

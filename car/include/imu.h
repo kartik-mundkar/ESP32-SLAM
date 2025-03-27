@@ -1,5 +1,5 @@
-#ifndef IMU_SENSOR_H
-#define IMU_SENSOR_H
+#ifndef ESP32_SLAM_IMU_SENSOR_H
+#define ESP32_SLAM_IMU_SENSOR_H
 
 #include <Arduino.h>
 #include <Wire.h>
@@ -21,12 +21,12 @@ public:
     void readIMUData(float &ax, float &ay, float &az, float &gx, float &gy, float &gz, float &mx, float &my, float &mz);
 
     // Orientation estimation using complementary filter
-    void estimateOrientation(float &roll, float &pitch);
+    void estimateOrientation(float &roll, float &pitch, float &yaw);
 
 private:
     MPU9250_asukiaaa mpu;
     float accAngleX, accAngleY;
-    float gyroAngleX, gyroAngleY;
+    float gyroAngleX, gyroAngleY, gyroAngleZ;
     float prevTime;
 };
 
