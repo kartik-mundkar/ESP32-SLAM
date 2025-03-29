@@ -1,4 +1,5 @@
 #include "../include/ultrasonic_sensor.h"
+#include "../include/json_utility.h"
 
 UltrasonicSensor::UltrasonicSensor(int trigPin, int echoPin) {
     this->triggerPin = trigPin;
@@ -20,4 +21,14 @@ float UltrasonicSensor::getDistance() {
     long duration = pulseIn(echoPin, HIGH);
     float distance = (duration * 0.0343) / 2;  // Convert time to cm
     return distance;
+}
+
+String UltrasonicSensor::get180Scan() {
+    String scanData = "";
+    for (int i = 0; i < 180; i+=10) {
+        scanData += JsonUtility::appendJson(scanData, {{"angle", i}, {"distance", getDistance()}});
+        delay(500);
+    }
+    Serial.println(scanData);
+    return scanData;
 }

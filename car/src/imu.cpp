@@ -72,7 +72,7 @@ void IMUSensor::readIMUData(float &ax, float &ay, float &az, float &gx, float &g
 }
 
 // Estimate orientation using complementary filter
-void IMUSensor::estimateOrientation(float &roll, float &pitch) {
+void IMUSensor::estimateOrientation(float &roll, float &pitch, float &yaw) {
     float ax, ay, az, gx, gy, gz, mx, my, mz;
     readIMUData(ax, ay, az, gx, gy, gz, mx, my, mz);
 
@@ -88,8 +88,15 @@ void IMUSensor::estimateOrientation(float &roll, float &pitch) {
     // Angle estimation from gyroscope
     gyroAngleX += gx * dt;
     gyroAngleY += gy * dt;
+    gyroAngleZ += gz * dt;
+
+    // Magnetometer-based yaw estimation
+    float magYaw = atan2(my, mx) * RAD_TO_DEG; // Heading angle from magnetometer
 
     // Complementary filter for smooth orientation
-    roll = 0.96 * gyroAngleX + 0.04 * accAngleX;
+    roll  = 0.96 * gyroAngleX + 0.04 * accAngleX;
     pitch = 0.96 * gyroAngleY + 0.04 * accAngleY;
+    // yaw   = 0.96 * gyroAngleZ + 0.04 * magYaw; // Correcting yaw drift using magnetometer
+    // If magnetometer is not available, use gyro for yaw estimation
+    yaw = gyroAngleZ;
 }

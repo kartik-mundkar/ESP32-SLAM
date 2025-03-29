@@ -1,5 +1,5 @@
-#ifndef BLUETOOTH_H
-#define BLUETOOTH_H
+#ifndef ESP32_SLAM_BLUETOOTH_H
+#define ESP32_SLAM_BLUETOOTH_H
 
 #include "Arduino.h"
 #include "BluetoothSerial.h"

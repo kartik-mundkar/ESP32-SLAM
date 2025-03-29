@@ -1,5 +1,5 @@
-#ifndef WEBSOCKET_IMU_H
-#define WEBSOCKET_IMU_H
+#ifndef ESP32_SLAM_WEBSOCKET_IMU_H
+#define ESP32_SLAM_WEBSOCKET_IMU_H
 
 #include <WebSocketsServer.h>
 #include "json_utility.h"  // Using the new utility for JSON creation
