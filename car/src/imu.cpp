@@ -1,102 +1,121 @@
-#include "../include/imu.h"
-#include "config.h"
+#include "IMU.h"
 
-// Constructor
-IMUSensor::IMUSensor() : accAngleX(0), accAngleY(0), gyroAngleX(0), gyroAngleY(0), prevTime(0) {}
+IMU::IMU() : roll(0), pitch(0), yaw(0) {}
 
-// Initialize MPU9250 sensor
-void IMUSensor::begin() {
-    Wire.begin(SDA_PIN, SCL_PIN, I2C_CLOCK_SPEED);
-    mpu.setWire(&Wire);  // Set I2C wire instance for MPU9250_asukiaaa library
+void IMU::begin()
+{
+    Wire.begin(32, 33);
+    I2CwriteByte(MPU9250_ADDRESS, 28, ACC_FULL_SCALE_16_G);
+    I2CwriteByte(MPU9250_ADDRESS, 27, GYRO_FULL_SCALE_2000_DPS);
+    I2CwriteByte(MPU9250_ADDRESS, 0x37, 0x02);
+    I2CwriteByte(MAG_ADDRESS, 0x0A, 0x01);
 
-    uint8_t sensorId;
-    int retryCount = 0;
-    const int maxRetries = 5;  // Maximum attempts to connect
+    calibrate();
+}
 
-    while (mpu.readId(&sensorId) != 0 && retryCount < maxRetries) {
-        Serial.print("IMU Sensor not found! Retrying... (Attempt ");
-        Serial.print(retryCount + 1);
-        Serial.println(")");
+void IMU::I2Cread(uint8_t Address, uint8_t Register, uint8_t Nbytes, uint8_t *Data)
+{
+    Wire.beginTransmission(Address);
+    Wire.write(Register);
+    Wire.endTransmission();
+    Wire.requestFrom(Address, Nbytes);
+    for (uint8_t i = 0; i < Nbytes; i++)
+    {
+        if (Wire.available())
+            Data[i] = Wire.read();
+    }
+}
 
-        delay(1000); // Delay between retry attempts
-        retryCount++;
+void IMU::I2CwriteByte(uint8_t Address, uint8_t Register, uint8_t Data)
+{
+    Wire.beginTransmission(Address);
+    Wire.write(Register);
+    Wire.write(Data);
+    Wire.endTransmission();
+}
+
+void IMU::calibrate()
+{
+    int numSamples = 200;
+    float gyroSum[3] = {0}, accelSum[3] = {0};
+
+    uint8_t Buf[14];
+    I2Cread(MPU9250_ADDRESS, 0x3B, 14, Buf);
+    for (int i = 0; i < numSamples; i++)
+    {
+
+        int16_t axx = -(Buf[0] << 8 | Buf[1]);
+        int16_t ayy = -(Buf[2] << 8 | Buf[3]);
+        int16_t azz = Buf[4] << 8 | Buf[5];
+        int16_t gxx = -(Buf[8] << 8 | Buf[9]);
+        int16_t gyy = -(Buf[10] << 8 | Buf[11]);
+        int16_t gzz = Buf[12] << 8 | Buf[13];
+
+        float ax = axx * 9.81 / 2048;
+        float ay = ayy * 9.81 / 2048;
+        float az = azz * 9.81 / 2048;
+        float gx = gxx / 16.4;
+        float gy = gyy / 16.4;
+        float gz = gzz / 16.4;
+
+        accelSum[0] += ax;
+        accelSum[1] += ay;
+        accelSum[2] += az;
+        gyroSum[0] += gx;
+        gyroSum[1] += gy;
+        gyroSum[2] += gz;
+
+        delay(10);
     }
 
-    if (retryCount == maxRetries) {
-        Serial.println("IMU Sensor initialization failed after multiple attempts.");
-        return;  // Continue the program without IMU functionality
+    for (int i = 0; i < 3; i++)
+    {
+        gyroBias[i] = gyroSum[i] / numSamples;
+        accelBias[i] = accelSum[i] / numSamples;
     }
 
-    // Proceed with initialization if connection is successful
-    mpu.beginAccel(ACC_FULL_SCALE_8_G);
-    mpu.beginGyro(GYRO_FULL_SCALE_500_DPS);
-    mpu.beginMag(MAG_MODE_CONTINUOUS_100HZ);
-
-    // Magnetometer Calibration (Example values, adjust as needed)
-    mpu.magXOffset = -20;
-    mpu.magYOffset = 15;
-    mpu.magZOffset = 30;
-    
-    Serial.println("IMU Sensor initialized successfully.");
+    accelBias[2] -= 9.81;
 }
 
-// Read acceleration data
-void IMUSensor::readAcceleration(float &ax, float &ay, float &az) {
-    mpu.accelUpdate();
-    ax = mpu.accelX();
-    ay = mpu.accelY();
-    az = mpu.accelZ();
-}
+IMUData IMU::readSensor(float dt)
+{
+    uint8_t Buf[14];
+    I2Cread(MPU9250_ADDRESS, 0x3B, 14, Buf);
 
-// Read gyroscope data
-void IMUSensor::readGyroscope(float &gx, float &gy, float &gz) {
-    mpu.gyroUpdate();
-    gx = mpu.gyroX();
-    gy = mpu.gyroY();
-    gz = mpu.gyroZ();
-}
+    IMUData data;
+    int16_t ax = -(Buf[0] << 8 | Buf[1]);
+    int16_t ay = -(Buf[2] << 8 | Buf[3]);
+    int16_t az = Buf[4] << 8 | Buf[5];
+    int16_t gx = -(Buf[8] << 8 | Buf[9]);
+    int16_t gy = -(Buf[10] << 8 | Buf[11]);
+    int16_t gz = Buf[12] << 8 | Buf[13];
 
-// Read magnetometer data
-void IMUSensor::readMagnetometer(float &mx, float &my, float &mz) {
-    mpu.magUpdate();
-    mx = mpu.magX();
-    my = mpu.magY();
-    mz = mpu.magZ();
-}
+    data.accel[0] = ax * 9.81 / 2048 - accelBias[0];
+    data.accel[1] = ay * 9.81 / 2048 - accelBias[1];
+    data.accel[2] = az * 9.81 / 2048 - accelBias[2];
 
-// Read all IMU data
-void IMUSensor::readIMUData(float &ax, float &ay, float &az, float &gx, float &gy, float &gz, float &mx, float &my, float &mz) {
-    readAcceleration(ax, ay, az);
-    readGyroscope(gx, gy, gz);
-    readMagnetometer(mx, my, mz);
-}
+    gx = (gx / 16.4 - gyroBias[0])*dt;
+    gy = (gy / 16.4 - gyroBias[1])*dt;
+    gz = (gz / 16.4 - gyroBias[2])*dt;
 
-// Estimate orientation using complementary filter
-void IMUSensor::estimateOrientation(float &roll, float &pitch, float &yaw) {
-    float ax, ay, az, gx, gy, gz, mx, my, mz;
-    readIMUData(ax, ay, az, gx, gy, gz, mx, my, mz);
+    data.gyro[0] = gx;
+    data.gyro[1] = gy;
+    data.gyro[2] = gz;
 
-    // Time difference calculation for gyro integration
-    unsigned long currTime = millis();
-    float dt = (currTime >= prevTime) ? (currTime - prevTime) / 1000.0 : (currTime + (ULONG_MAX - prevTime)) / 1000.0;
-    prevTime = currTime;
+    roll += data.gyro[0];
+    pitch += data.gyro[1];
+    yaw += data.gyro[2] ;
 
-    // Angle estimation from accelerometer (tilt angle)
-    accAngleX = atan2(ay, sqrt(ax * ax + az * az)) * RAD_TO_DEG;
-    accAngleY = atan2(-ax, sqrt(ay * ay + az * az)) * RAD_TO_DEG;
+    if (abs(roll) > 360)
+        roll = 0;
+    if (abs(pitch) > 360)
+        pitch = 0;
+    if (abs(yaw) > 360)
+        yaw = 0;
 
-    // Angle estimation from gyroscope
-    gyroAngleX += gx * dt;
-    gyroAngleY += gy * dt;
-    gyroAngleZ += gz * dt;
+    data.roll = roll;
+    data.pitch = pitch;
+    data.yaw = yaw;
 
-    // Magnetometer-based yaw estimation
-    float magYaw = atan2(my, mx) * RAD_TO_DEG; // Heading angle from magnetometer
-
-    // Complementary filter for smooth orientation
-    roll  = 0.96 * gyroAngleX + 0.04 * accAngleX;
-    pitch = 0.96 * gyroAngleY + 0.04 * accAngleY;
-    // yaw   = 0.96 * gyroAngleZ + 0.04 * magYaw; // Correcting yaw drift using magnetometer
-    // If magnetometer is not available, use gyro for yaw estimation
-    yaw = gyroAngleZ;
+    return data;
 }
