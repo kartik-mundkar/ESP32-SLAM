@@ -2,6 +2,7 @@
 #define ESP32_SLAM_IMU_SENSOR_H
 
 #include <Wire.h>
+#include <Arduino.h>
 #include <math.h>
 #include <algorithm>
 
@@ -27,14 +28,16 @@ struct IMUData {
     float roll, pitch, yaw; // Orientation angles in degrees
 };
 
-class IMU {
+class IMUSensor {
     public:
-    IMU();
+    IMUSensor(int imuPins[]);
     void begin();
     void calibrate();
     IMUData readSensor(float dt);
-    
+    String getIMUJson(IMUData data); 
+
     private:
+    int SDA , SCL ; // I2C SCL pin
     void I2Cread(uint8_t Address, uint8_t Register, uint8_t Nbytes, uint8_t* Data);
     void I2CwriteByte(uint8_t Address, uint8_t Register, uint8_t Data);
     void applyLowPassFilter(IMUData &data);

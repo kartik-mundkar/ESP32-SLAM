@@ -1,6 +1,9 @@
 #include "../include/websocket_imu.h"
 
-WebSocketIMU::WebSocketIMU(uint16_t port) : webSocket(port) {}
+WebSocketIMU::WebSocketIMU(uint16_t port) : webSocket(port) {
+    // Constructor to initialize WebSocket server on the specified port
+    Serial.printf("WebSocketIMU initialized on port %d\n", port);
+}
 
 void WebSocketIMU::begin() {
     webSocket.begin();

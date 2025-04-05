@@ -28,6 +28,6 @@
 #define BLUETOOTH_NAME "ESP32-Car"
 #define BLUETOOTH_PIN "1234"
 
-//wifi-connection configuartion
-#define WIFI_SSID "YourWiFiSSID"
-#define WIFI_PASSWORD "YourWiFiPassword"
+// //wifi-connection configuartion
+const char* ssid = "KARTIK 2824";
+const char* password = "84Q38#3u";

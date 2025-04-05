@@ -1,37 +1,26 @@
 #ifndef ESP32_SLAM_CAR_H
 #define ESP32_SLAM_CAR_H
+
 #include <Arduino.h>
 #include "motor.h"
 #include "servo.h"
 #include "imu.h"
 #include "ultrasonic_sensor.h"
-#include "bluetooth.h"
-#include "json_utility.h"
-
 
 const int MIN_DISTANCE = 20;
 
-class Car
-{
+class Car : public Motor, public IMUSensor, public UltrasonicSensor {
 private:
-    Motor *motor;
-    ServoMotor *servo;
-    IMUSensor *imu;
-    UltrasonicSensor *ultrasonic_sensor;
-    BluetoothHandler *bt;
     int speed;
-    String scanData;
-    String ultrasonicData;
-    
-    public:
-    Car(BluetoothHandler *bt, Motor *motor, ServoMotor *servo, IMUSensor *imu, UltrasonicSensor *ultrasonic_sensor);
+
+public:
+    Car(int motorPins[], int imuPins[], int ultrasonicPins[], int servoPin);
     ~Car();
     void initComponents();
     void drive(char command);
     bool isObstacleDetected();
-    String getIMU_JSONData();
-    String get180Scan();
-    String getDistance();
+    UltraData ultraScan();
+    String getCarData(float dt);
 };
 
-#endif // CAR_H
+#endif // ESP32_SLAM_CAR_H

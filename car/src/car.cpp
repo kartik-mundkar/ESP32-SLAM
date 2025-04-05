@@ -1,117 +1,68 @@
 #include "../include/car.h"
 
-Car::Car(BluetoothHandler *bt, Motor *motor, ServoMotor *servo, IMUSensor *imu, UltrasonicSensor *ultrasonic_sensor)
-{
-    this->speed = 100;
-    this->motor = motor;
-    this->servo = servo;
-    this->imu = imu;
-    this->ultrasonic_sensor = ultrasonic_sensor;
-    this->bt = bt;
-    Serial.println("Starting ESP32 Car...");
-}
-Car::~Car()
-{
+Car::Car(int motorPins[], int imuPins[], int ultrasonicPins[], int servoPin)
+    // Initialize the base classes with the provided pins
+    : Motor(motorPins[0], motorPins[1], motorPins[2], motorPins[3], motorPins[4], motorPins[5]),
+      IMUSensor(imuPins),
+      UltrasonicSensor(ultrasonicPins[0], ultrasonicPins[1],servoPin) // Pass servo if needed
+ {
+    this->speed = 175; // Default speed
 }
 
-void Car::initComponents()
-{
-    this->bt->begin();
-    this->motor->stopMotor();
-    this->servo->begin();
-    this->imu->begin();
-    this->ultrasonic_sensor->begin();
-    Serial.println("All components initialized successfully!");
+Car::~Car() {}
+
+void Car::initComponents() {
+    Motor::stopMotor();
+    UltrasonicSensor::begin();
+    IMUSensor::begin();
 }
 
-bool Car::isObstacleDetected()
-{
-    float currentDistance = this->ultrasonic_sensor->getDistance();
-    if (currentDistance < MIN_DISTANCE)
-    {
-        this->motor->stopMotor();
-        Serial.println("Obstacle Detected");
-        this->bt->sendData("Obstacle Detected");
-        return true;
-    }
-    return false;
-}
-
-void Car::drive(char command)
-{
-    if (!this->bt->isConnected())
-    {
-        return;
-    }
-    switch (command)
-    {
+void Car::drive(char command) {
+    UltraData data ;
+    switch (command) {
     case 'F':
-        this->motor->moveForward(speed);
-        servo->setAngle(90);
-        if (isObstacleDetected())
-        {
-            this->motor->stopMotor();
-            Serial.println("Obstacle Detected");
-            this->bt->sendData("Obstacle Detected");
-            this->ultrasonicData = get180Scan();
-            return;
-        }
-        Serial.println("Moving Forward");
-        this->bt->sendData("Moving Forward");
-        this->bt->sendData("Speed: " + String(speed));
-        this->bt->sendData("Distance: " + String(this->ultrasonic_sensor->getDistance()));
+        Motor::moveForward(speed);
+        isObstacleDetected();
         break;
-
     case 'B':
-        this->motor->moveBackward(speed);
-        Serial.println("Moving Backward");
-        this->bt->sendData("Moving Backward");
+        Motor::moveBackward(speed);
         break;
-
     case 'L':
-        this->motor->turnLeft(speed);
-        Serial.println("Turning Left");
-        this->bt->sendData("Turning Left");
+        Motor::turnLeft(speed);
         break;
-
     case 'R':
-        this->motor->turnRight(speed);
-        Serial.println("Turning Right");
-        this->bt->sendData("Turning Right");
+        Motor::turnRight(speed);
         break;
-
     case 'S':
-        this->motor->stopMotor();
-        Serial.println("Stopping Motors");
-        this->bt->sendData("Stopping Motors");
+        Motor::stopMotor();
         break;
-
     case 'C':
-        this->motor->stopMotor();
-        Serial.println("Ultrasonic Scan Triggered!");
-        this->bt->sendData("Ultrasonic Scan Triggered!");
-        this->scanData = get180Scan();
-        this->bt->sendData(scanData);
+        // Perform a scan and get the data
+        data = UltrasonicSensor::performScan();
+        // String json = UltrasonicSensor::getJson(data.angles, data.distances, MAX_SCANS);
+        // Serial.println(json); // Print the JSON data to the Serial Monitor
         break;
+        
     default:
         break;
     }
 }
 
-String Car::getIMU_JSONData()
-{
-    float ax, ay, az, gx, gy, gz, mx, my, mz, roll, pitch, yaw;
-    this->imu->readIMUData(ax, ay, az, gx, gy, gz, mx, my, mz);
-    this->imu->estimateOrientation(roll, pitch, yaw);
-    return JsonUtility::createJson({{"ax", ax}, {"ay", ay}, {"az", az}, {"gx", gx}, {"gy", gy}, {"gz", gz}, {"mx", mx}, {"my", my}, {"mz", mz}, {"roll", roll}, {"pitch", pitch}, {"yaw", yaw}});
+bool Car::
+isObstacleDetected() {
+    float currentDistance = UltrasonicSensor::getDistance();
+    if (currentDistance < MIN_DISTANCE) {
+        Motor::stopMotor();
+        return true;
+    }
+    return false;
 }
 
-String Car::getDistance()
-{
-    return JsonUtility::createJson({{"distance", this->ultrasonic_sensor->getDistance()}});
+UltraData Car::ultraScan() {
+    return UltrasonicSensor::performScan();
 }
 
-String Car::get180Scan()
-{
-    return this->ultrasonic_sensor->get180Scan();
+String Car::getCarData(float dt) {
+    String imuJson = IMUSensor::getIMUJson(IMUSensor::readSensor(dt));
+    return "{\"mode\":\"moving\",\"timestamp\":" + String(millis()) + ",\"car\":{\"imuData\":" + imuJson + "}}";
 }

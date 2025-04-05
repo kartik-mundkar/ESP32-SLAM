@@ -16,6 +16,7 @@ Motor::Motor(int ENA, int ENB, int IN1, int IN2, int IN3, int IN4)
     pinMode(IN2, OUTPUT);
     pinMode(IN3, OUTPUT);
     pinMode(IN4, OUTPUT);
+    Serial.println("Motor initialized");
 }
 
 // Move forward

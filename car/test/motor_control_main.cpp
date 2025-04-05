@@ -1,29 +1,31 @@
-#include <Arduino.h>
-#include "../include/motor_control.h"
+// #include <Arduino.h>
+// #include "utils.h"
+// #include "../include/motor.h"
 
-void setup() {
-    Serial.begin(115200);
-    setupMotors();
-}
+// Motor motor1(MOTOR_ENA, MOTOR_ENB, MOTOR_IN1, MOTOR_IN2, MOTOR_IN3, MOTOR_IN4);
 
-void loop() {
-    Serial.println("Moving Forward");
-    moveForward(150);  // Speed 0-255
-    delay(2000);
+// void setup() {
+//     Serial.begin(115200);
+// }
 
-    Serial.println("Turning Left");
-    turnLeft(150);
-    delay(1000);
+// void loop() {
+//     Serial.println("Moving Forward");
+//     motor1.moveBackward(150);  // Speed 0-255
+//     delay(2000);
 
-    Serial.println("Turning Right");
-    turnRight(150);
-    delay(1000);
+//     Serial.println("Turning Left");
+//     motor1.turnLeft(150);
+//     delay(1000);
 
-    Serial.println("Moving Backward");
-    moveBackward(150);
-    delay(2000);
+//     Serial.println("Turning Right");
+//     motor1.turnRight(150);
+//     delay(1000);
 
-    Serial.println("Stopping");
-    stopCar();
-    delay(2000);
-}
+//     Serial.println("Moving Backward");
+//     motor1.moveBackward(150);
+//     delay(2000);
+
+//     Serial.println("Stopping");
+//     motor1.stopMotor();
+//     delay(2000);
+// }

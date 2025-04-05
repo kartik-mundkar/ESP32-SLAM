@@ -2,7 +2,6 @@
 #define ESP32_SLAM_WEBSOCKET_IMU_H
 
 #include <WebSocketsServer.h>
-#include "json_utility.h"  // Using the new utility for JSON creation
 
 class WebSocketIMU {
 public:
