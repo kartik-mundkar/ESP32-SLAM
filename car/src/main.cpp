@@ -2,57 +2,38 @@
 #include <WiFi.h>
 #include <WebSocketsServer.h>
 #include "car.h"
+#include "websocket_handler.h"
+#include "tasks.h"
 #include "config.h"
 
-WebSocketsServer webSocket(81); // WebSocket server on port 81
-// Define network parameters
-IPAddress local_IP(192, 168, 137 ,120); // Your desired static IP
-IPAddress gateway(192, 168, 1, 1);  // Your router's IP (gateway)
-IPAddress subnet(255, 255, 255, 0); // Subnet mask
-IPAddress primaryDNS(8, 8, 8, 8); // Optional: Google DNS
-IPAddress secondaryDNS(8, 8, 4, 4); // Optional: Google DNS
+// WebSocket servers
+WebSocketsServer commandWebSocket(81); // WebSocket for receiving commands
+WebSocketsServer dataWebSocket(82);    // WebSocket for sending data
+
+// Static IP configuration
+IPAddress local_IP(192, 168, 137, 120);    // Replace with your desired static IP
+IPAddress gateway(192, 168, 1, 1);         // Replace with your router's gateway
+IPAddress subnet(255, 255, 255, 0);        // Subnet mask
+IPAddress primaryDNS(8, 8, 8, 8);          // Optional: Primary DNS server
+IPAddress secondaryDNS(8, 8, 4, 4);        // Optional: Secondary DNS server
 
 // Create Car Object
 int motorPins[] = {MOTOR_ENA, MOTOR_ENB, MOTOR_IN1, MOTOR_IN2, MOTOR_IN3, MOTOR_IN4};
 int imuPins[] = {SDA_PIN, SCL_PIN};
 int ultrasonicPins[] = {TRIGGER_PIN, ECHO_PIN};
-int servoPin = SERVO_PIN; // Servo pin for ultrasonic sensor
-Car car(motorPins, imuPins, ultrasonicPins, servoPin); // Create Car object
-
-unsigned long lastTime = 0;
-static unsigned long lastWebSocketTime = 0;
-
-// WebSocket event handler
-void handleWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length) {
-    switch (type) {
-    case WStype_CONNECTED:
-        Serial.printf("[WebSocket] Client %u connected.\n", num);
-        break;
-
-    case WStype_DISCONNECTED:
-        Serial.printf("[WebSocket] Client %u disconnected.\n", num);
-        break;
-
-    case WStype_TEXT:
-        Serial.printf("[WebSocket] Received command: %s\n", payload);
-        car.drive((char)payload[0]); // Use the first character as the command
-        break;
-
-    default:
-        break;
-    }
-}
+Car car(motorPins, imuPins, ultrasonicPins, SERVO_PIN, &dataWebSocket);
 
 void setup() {
     Serial.begin(115200);
     Serial.println("Starting ESP32 Car...");
 
-    // Configures static IP address
+    // Configure static IP
     if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) {
         Serial.println("STA Failed to configure");
     }
 
     // Connect to WiFi
+    WiFi.setHostname("ESP32-Car");
     WiFi.begin(ssid, password); // Replace with your WiFi credentials
     while (WiFi.status() != WL_CONNECTED) {
         delay(1000);
@@ -62,31 +43,25 @@ void setup() {
     Serial.print("IP Address: ");
     Serial.println(WiFi.localIP());
 
-    car.initComponents(); // Initialize all components
+    // Initialize WebSocket servers
+    commandWebSocket.begin();
+    commandWebSocket.onEvent(handleCommandWebSocketEvent);
+
+    dataWebSocket.begin();
+    dataWebSocket.onEvent(handleDataWebSocketEvent);
+
+    // Initialize car components
+    car.initComponents();
     Serial.println("Car components initialized.");
-    // Start WebSocket server
-    webSocket.begin();
-    webSocket.onEvent(handleWebSocketEvent);
-    Serial.println("WebSocket server started on port 81.");
+
+    // Initialize FreeRTOS tasks
+    initTasks(&car, &commandWebSocket, &dataWebSocket);
 }
 
 void loop() {
-    unsigned long currentTime = millis();
-    float dt = (currentTime - lastTime) / 1000.0;
-    lastTime = currentTime;
-    // Send IMU data via WebSocket every 50 ms
-    // if (millis() - lastWebSocketTime >= 50) {
-    //     lastWebSocketTime = millis();
-    //     String imuData = car.getCarData(dt); // Get IMU data in JSON format
-    //     // Serial.println(imuData); // Print IMU data to Serial Monitor
-    //     webSocket.broadcastTXT(imuData); // Broadcast IMU data to all connected clients
-    // }
-    String imuData = car.getCarData(dt); // Get IMU data in JSON format
-    Serial.println(imuData); // Print IMU data to Serial Monitor
-    webSocket.broadcastTXT(imuData); // Broadcast IMU data to all connected clients
-    
-    // Handle WebSocket events
-    webSocket.loop();
+    // Process WebSocket events
+    commandWebSocket.loop();
+    dataWebSocket.loop();
 }
 
 

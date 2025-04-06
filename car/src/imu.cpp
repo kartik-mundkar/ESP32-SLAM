@@ -19,7 +19,7 @@ void IMUSensor::begin()
     I2CwriteByte(MPU9250_ADDRESS, 0x37, 0x02);
     // I2CwriteByte(MAG_ADDRESS, 0x0A, 0x01);
     delay(1000);
-    calibrate();
+    calibrateIMU();
 }
 
 void IMUSensor::I2Cread(uint8_t Address, uint8_t Register, uint8_t Nbytes, uint8_t *Data)
@@ -144,7 +144,7 @@ float IMUSensor::median(float buffer[5][3], int index)
     return values[2]; // Return the middle value (the median)
 }
 
-void IMUSensor::calibrate()
+void IMUSensor::calibrateIMU()
 {
     int numSamples = 500;
     float gyroSum[3] = {0}, accelSum[3] = {0};
@@ -215,7 +215,7 @@ IMUData IMUSensor::readSensor(float dt)
     applyLowPassFilter(data);
     applyKalmanFilter(data);
     applyHighPassFilter(data); // Apply High-Pass Filter
-    // applyMedianFilter(data);   // Apply Median Filter
+    applyMedianFilter(data);   // Apply Median Filter
 
     roll += round(data.gyro[0] * 100) / 100;
     pitch += round(data.gyro[1] * 100) / 100;
@@ -236,7 +236,7 @@ IMUData IMUSensor::readSensor(float dt)
 }
 
 String IMUSensor::getIMUJson(IMUData data) {
-    return "{\"imu\":{\"aX\":" + String(data.accel[0], 2) +
+    return "{\"aX\":" + String(data.accel[0], 2) +
            ",\"aY\":" + String(data.accel[1], 2) +
            ",\"aZ\":" + String(data.accel[2], 2) +
            ",\"gX\":" + String(data.gyro[0], 2) +
@@ -244,5 +244,5 @@ String IMUSensor::getIMUJson(IMUData data) {
            ",\"gZ\":" + String(data.gyro[2], 2) +
            ",\"R\":" + String(data.roll, 2) +
            ",\"P\":" + String(data.pitch, 2) +
-           ",\"Y\":" + String(data.yaw, 2) + "}}";
+           ",\"Y\":" + String(data.yaw, 2) + "}";
 }

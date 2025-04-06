@@ -32,7 +32,7 @@ class IMUSensor {
     public:
     IMUSensor(int imuPins[]);
     void begin();
-    void calibrate();
+    void calibrateIMU();
     IMUData readSensor(float dt);
     String getIMUJson(IMUData data); 
 

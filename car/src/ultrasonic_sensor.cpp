@@ -11,6 +11,7 @@ void UltrasonicSensor::begin() {
     pinMode(triggerPin, OUTPUT);
     pinMode(echoPin, INPUT);
     ServoMotor::begin();
+    ServoMotor::setAngle(90); // Set initial position to 90 degrees
 }
 
 float UltrasonicSensor::getDistance() {
@@ -31,7 +32,7 @@ UltraData UltrasonicSensor::performScan() {
     scanSize = 0;
     for (int angle = SCAN_START; angle <= SCAN_END; angle += STEP_SIZE) {
         ServoMotor::setAngle(angle);
-        delay(100);  // Wait for the servo to stabilize
+        delay(20);  // Wait for the servo to stabilize
 
         ultraData.angles[scanSize] = angle;
         ultraData.distances[scanSize] = getDistance();

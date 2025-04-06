@@ -6,21 +6,26 @@
 #include "servo.h"
 #include "imu.h"
 #include "ultrasonic_sensor.h"
+#include <WebSocketsServer.h> // Include the WebSocket library
 
 const int MIN_DISTANCE = 20;
 
 class Car : public Motor, public IMUSensor, public UltrasonicSensor {
 private:
-    int speed;
+int speed;
 
 public:
-    Car(int motorPins[], int imuPins[], int ultrasonicPins[], int servoPin);
+    WebSocketsServer *webSocket; // Pointer to the WebSocket server
+    Car(int motorPins[], int imuPins[], int ultrasonicPins[], int servoPin, WebSocketsServer *webSocket);
     ~Car();
     void initComponents();
     void drive(char command);
     bool isObstacleDetected();
-    UltraData ultraScan();
     String getCarData(float dt);
+    // void setSpeed(int speed);     // Setter for speed
+    int getSpeed() const { return speed; } // Getter for speed
+    void setServoAngle(int angle); // Method to set the servo angle
+    void handleScan(); // Handle the 180-degree scan
 };
 
 #endif // ESP32_SLAM_CAR_H
