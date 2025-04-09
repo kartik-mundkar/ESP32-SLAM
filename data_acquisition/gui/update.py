@@ -75,6 +75,19 @@ def process_imu_data(accelX, accelY, gyroZ):
     x_data.append(X)
     y_data.append(Y)
 
+def plot_scanning_data(angles, distances):
+    """Plot scanning data at the latest position."""
+    global X, Y, yaw
+
+    # Convert angles and distances to global coordinates
+    for angle, distance in zip(angles, distances):
+        angle_rad = np.radians(angle) + yaw  # Convert angle to radians and add current yaw
+        x_scan = X + distance * np.cos(angle_rad)  # Calculate global X
+        y_scan = Y + distance * np.sin(angle_rad)  # Calculate global Y
+        ax.plot(x_scan, y_scan, 'ro', markersize=2)  # Plot as red dots for scanning data
+
+    canvas.draw()  # Update the plot
+
 def update_plot():
     """Update the Matplotlib plot in the GUI."""
     line_path.set_data(x_data, y_data)
@@ -109,9 +122,7 @@ async def receive_data():
                         ultra = data["scan"]
                         angles = ultra["angle"]
                         distances = ultra["distance"]
-                        # Here you can add code to visualize the scanning data if needed
-                        # For example, you can plot the distances at the corresponding angles
-                        # This is just a placeholder for demonstration
+                        plot_scanning_data(angles, distances)
                         print(f"Scanning data: Angles: {angles}, Distances: {distances}")
                     else:
                         pass  # Ignore other modes
