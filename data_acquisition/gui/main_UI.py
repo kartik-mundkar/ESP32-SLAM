@@ -172,6 +172,7 @@ def process_imu_data(accelX, accelY, accelZ, gyroX, gyroY, gyroZ, imu_yaw):
 
         # Normalize yaw to the range [-pi, pi]
         yaw = (yaw + np.pi) % (2 * np.pi) - np.pi
+        yaw = yaw + np.pi/2  # Adjust yaw to match the car's orientation
         # yaw = yaw*1.2/5  # Adjust yaw to match the car's orientation
         # Update the heading arrow
         dx = np.cos(yaw)  # X component of the heading
@@ -214,7 +215,7 @@ def plot_scanning_data(angles, distances):
 
     # Convert angles and distances to global coordinates
     for angle, distance in zip(angles, distances):
-        angle_rad = np.radians(angle) + yaw  # Convert angle to radians and add current yaw
+        angle_rad = np.radians(angle) + yaw - np.pi/2  # Convert angle to radians and add current yaw
         x_scan = X + distance * np.cos(angle_rad)  # Calculate global X
         y_scan = Y + distance * np.sin(angle_rad)  # Calculate global Y
         scan_x_data.append(x_scan)
@@ -225,13 +226,8 @@ def plot_scanning_data(angles, distances):
     polygon_y = [Y] + scan_y_data + [Y]
     scan_polygons.append((polygon_x, polygon_y))  # Store the polygon for later use
 
-    # Clear previous filled areas
-    for collection in ax.collections[:]:
-        if isinstance(collection, PolyCollection):  # Check if it's a polygon
-            collection.remove()
-    # Draw all polygons
-    for poly_x, poly_y in scan_polygons:
-        ax.fill(poly_x, poly_y, color='lightblue', alpha=0.5)
+    # Draw only the latest polygon
+    ax.fill(polygon_x, polygon_y, color='lightblue', alpha=0.5)
 
      # Update the heading arrow
 
@@ -585,7 +581,7 @@ def clear_plot():
     current_marker.set_data([], [])
 
     # Reset the heading arrow
-    heading_arrow.set_UVC(1, 0)  # Reset the arrow direction
+    heading_arrow.set_UVC(0, 1)  # Reset the arrow direction
     heading_arrow.set_offsets([[x_data[0], y_data[0]]])  # Reset to the starting position
 
     # Reset the plot limits
@@ -645,7 +641,7 @@ current_marker, = ax.plot([], [], 'ro', label="Current", markersize=10)  # Red m
 ax.legend()
 
 # Initialize heading arrow
-heading_arrow = ax.quiver(0, 0, 0, 0, angles='xy', scale_units='xy', scale=5, color='red', label="Heading")
+heading_arrow = ax.quiver(0, 0, 0, 1, angles='xy', scale_units='xy', scale=5, color='red', label="Heading")
 
 canvas = FigureCanvasTkAgg(fig, master=plot_frame)
 canvas_widget = canvas.get_tk_widget()
