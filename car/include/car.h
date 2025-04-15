@@ -22,10 +22,8 @@ public:
     void drive(char command);
     bool isObstacleDetected();
     String getCarData(float dt);
-    // void setSpeed(int speed);     // Setter for speed
     int getSpeed() const { return speed; } // Getter for speed
     void setServoAngle(int angle); // Method to set the servo angle
-    void handleScan(); // Handle the 180-degree scan
 };
 
 #endif // ESP32_SLAM_CAR_H

@@ -3,12 +3,14 @@ from tkinter import messagebox
 from websocket import create_connection
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
+from matplotlib.collections import PolyCollection
+from matplotlib.patches import Polygon
 import numpy as np
 import asyncio
 import websockets
 import threading
 import json
-import time
+from datetime import datetime
 from ahrs.filters import Madgwick
 from scipy.spatial.transform import Rotation as R
 from filterpy.kalman import KalmanFilter
@@ -32,11 +34,11 @@ accelY_offset = 0
 
 # Constants
 g = 9.81  # Gravity
-dt = 0.05  # 20Hz update rate
+dt = 0.1  #  update rate
 ALPHA_GYRO = 0.995  # Trust more on gyro, but correct drift
 ACCEL_ALPHA = 0.3  # Stronger smoothing for acceleration
 VEL_DECAY = 0.96  # Reduce oscillations by velocity decay
-STATIONARY_THRESHOLD = 0.02  # Threshold for zero-velocity update (ZUPT)
+STATIONARY_THRESHOLD = 0.03  # Threshold for zero-velocity update (ZUPT)
 
 # State Variables
 X, Y = 0.0, 0.0  # Global position
@@ -47,6 +49,10 @@ ax_m, ay_m = 0.0, 0.0  # Filtered acceleration
 
 # Data storage for plotting
 x_data, y_data = [0], [0]
+# Global variables for scan data
+scan_x_data, scan_y_data = [], []  # Store X and Y coordinates of scan data
+# Global list to store polygons
+scan_polygons = []  # Each element is a tuple: (polygon_x, polygon_y)
 
 # Initialize Madgwick filter and state variables
 madgwick = Madgwick()
@@ -71,15 +77,27 @@ kf.Q = np.array([[0.01, 0, 0, 0],  # Process noise covariance
                  [0, 0, 0, 0.1]])
 kf.x = np.array([0, 0, 0, 0])  # Initial state: [X, Y, Vx, Vy]
 
+# Kalman Filter for yaw estimation
+kf_yaw = KalmanFilter(dim_x=2, dim_z=1)  # State: [yaw, yaw_rate], Measurement: [yaw]
+kf_yaw.F = np.array([[1, dt],  # State transition matrix
+                     [0, 1]])
+kf_yaw.H = np.array([[1, 0]])  # Measurement function
+kf_yaw.P *= 10  # Initial covariance matrix
+kf_yaw.R = np.array([[0.1]])  # Measurement noise covariance (sensor noise)
+kf_yaw.Q = np.array([[0.01, 0],  # Process noise covariance (gyro noise)
+                     [0, 0.01]])
+kf_yaw.x = np.array([0, 0])  # Initial state: [yaw, yaw_rate]
+
+
 # Add a global variable to track repeated acceleration values
 last_accel = None  # Store the last acceleration value
 repeat_count = 0  # Count how many times the same value is repeated
-REPEAT_THRESHOLD = 10  # Number of iterations to tolerate repeated values
+REPEAT_THRESHOLD = 5  # Number of iterations to tolerate repeated values
 
 def process_imu_data(accelX, accelY, accelZ, gyroX, gyroY, gyroZ, imu_yaw):
     """Process IMU data to compute the car's position and estimate yaw."""
     global X, Y, Vx, Vy, yaw, gyroZ_filtered, ax_m, ay_m, quat, position, velocity
-    global last_accel, repeat_count  # Use the global variables for tracking
+    global last_accel, repeat_count, kf_yaw   # Use the global variables for tracking
 
     try:
         # Convert gyroscope data from degrees per second to radians per second
@@ -88,14 +106,14 @@ def process_imu_data(accelX, accelY, accelZ, gyroX, gyroY, gyroZ, imu_yaw):
 
         # Ignore updates if IMU data is too small
         if np.linalg.norm(gyro) < 1e-6 and np.linalg.norm(accel) < 1e-6:
-            print("IMU data too small, skipping update.")
+            # print("IMU data too small, skipping update.")
             return
 
         # Check for repeated acceleration values
         if last_accel is not None and np.allclose(accel, last_accel, atol=1e-3):
             repeat_count += 1
             if repeat_count > REPEAT_THRESHOLD:
-                print("Repeated acceleration detected, skipping update.")
+                # print("Repeated acceleration detected, skipping update.")
                 return
         else:
             repeat_count = 0  # Reset the counter if the value changes
@@ -121,26 +139,46 @@ def process_imu_data(accelX, accelY, accelZ, gyroX, gyroY, gyroZ, imu_yaw):
         # Remove gravity from the Z-axis
         acc_global[2] -= g  # Subtract gravity (9.81 m/s^2)
 
+        # Extract global acceleration components
+        ax_global, ay_global = acc_global[0], acc_global[1]
+
         # Zero-Velocity Update (ZUPT)
-        if np.linalg.norm(acc_global[:2]) < STATIONARY_THRESHOLD:
-            velocity[:] = 0  # Reset velocity to zero
+        if abs(ax_global) < STATIONARY_THRESHOLD and abs(ay_global) < STATIONARY_THRESHOLD:
+            Vx, Vy = 0, 0  # Reset velocity to zero
         else:
             # Update velocity and position
             velocity += acc_global * dt
-            position += velocity * dt
 
         # Apply velocity decay to reduce drift
         velocity *= VEL_DECAY
 
-        # Estimate yaw using gyroscope data
-        yaw += gyro[2] * dt  # Integrate gyroscope Z-axis data to estimate yaw
+        # Update position only if velocity is above a threshold
+        VELOCITY_THRESHOLD = 0.02
+        if np.linalg.norm(velocity[:2]) > VELOCITY_THRESHOLD:
+            position += velocity * dt
 
-        # Correct yaw using the sensor-provided yaw (imu_yaw)
+        # Kalman Filter for Yaw
         imu_yaw_radians = np.radians(imu_yaw)  # Convert imu_yaw to radians
-        yaw = ALPHA_GYRO * yaw + (1 - ALPHA_GYRO) * imu_yaw_radians  # Complementary filter
+        gyro_yaw_rate = gyro[2]  # Gyroscope yaw rate (rad/s)
+
+        # Prediction Step
+        kf_yaw.predict()
+
+        # Update Step
+        kf_yaw.update(np.array([imu_yaw_radians]))  # Use sensor yaw as measurement
+
+        # Extract the filtered yaw and yaw rate
+        yaw, yaw_rate = kf_yaw.x
 
         # Normalize yaw to the range [-pi, pi]
         yaw = (yaw + np.pi) % (2 * np.pi) - np.pi
+        # yaw = yaw*1.2/5  # Adjust yaw to match the car's orientation
+        # Update the heading arrow
+        dx = np.cos(yaw)  # X component of the heading
+        dy = np.sin(yaw)  # Y component of the heading
+        heading_arrow.set_UVC(dx, dy)  # Update arrow direction
+        heading_arrow.set_offsets([[X, Y]])  # Update arrow position
+
 
         # Kalman Filter Prediction Step
         kf.predict()
@@ -152,9 +190,10 @@ def process_imu_data(accelX, accelY, accelZ, gyroX, gyroY, gyroZ, imu_yaw):
         # Extract filtered position and velocity
         X, Y, Vx, Vy = kf.x[0], kf.x[1], kf.x[2], kf.x[3]
 
-        # Store position for plotting
         x_data.append(X)
         y_data.append(Y)
+
+
 
     except ValueError as e:
         print(f"Error in process_imu_data: {e}")
@@ -162,19 +201,50 @@ def process_imu_data(accelX, accelY, accelZ, gyroX, gyroY, gyroZ, imu_yaw):
 
 def plot_scanning_data(angles, distances):
     """Plot scanning data at the latest position."""
-    global X, Y, yaw
+    global X, Y, yaw, scan_x_data, scan_y_data, scan_line, scan_polygons
 
     # Ensure angles and distances are valid sequences
     if not angles or not distances or len(angles) != len(distances):
         print("Warning: Invalid angles or distances. Skipping scanning plot.")
         return
 
+     # Convert angles and distances to global coordinates
+    scan_x_data = []
+    scan_y_data = []
+
     # Convert angles and distances to global coordinates
     for angle, distance in zip(angles, distances):
         angle_rad = np.radians(angle) + yaw  # Convert angle to radians and add current yaw
         x_scan = X + distance * np.cos(angle_rad)  # Calculate global X
         y_scan = Y + distance * np.sin(angle_rad)  # Calculate global Y
-        ax.plot(x_scan, y_scan, 'ro', markersize=2)  # Plot as red dots for scanning data
+        scan_x_data.append(x_scan)
+        scan_y_data.append(y_scan)
+
+    # Create a polygon by joining the car's current position and the scan points
+    polygon_x = [X] + scan_x_data + [X]  # Close the polygon by returning to the car's position
+    polygon_y = [Y] + scan_y_data + [Y]
+    scan_polygons.append((polygon_x, polygon_y))  # Store the polygon for later use
+
+    # Clear previous filled areas
+    for collection in ax.collections[:]:
+        if isinstance(collection, PolyCollection):  # Check if it's a polygon
+            collection.remove()
+    # Draw all polygons
+    for poly_x, poly_y in scan_polygons:
+        ax.fill(poly_x, poly_y, color='lightblue', alpha=0.5)
+
+     # Update the heading arrow
+
+    # Update the scan line plot
+    # scan_line.set_data(scan_x_data, scan_y_data)
+
+        # Adjust plot limits dynamically
+    if len(scan_x_data) > 10:
+        x_min, x_max = min(scan_x_data), max(scan_x_data)
+        y_min, y_max = min(scan_y_data), max(scan_y_data)
+        padding = 1  # Add padding for better view
+        ax.set_xlim(x_min - padding, x_max + padding)
+        ax.set_ylim(y_min - padding, y_max + padding)
 
     canvas.draw()  # Update the plot
 
@@ -233,7 +303,7 @@ async def receive_data():
                         imu = data["car"]["imu"]
                         ultra = data["car"]["ultra"]
                         print(f"IMU: {imu}, Ultra: {ultra}")
-                        process_imu_data(imu["aX"], -1*imu["aY"], imu["aZ"], imu["gX"], imu["gY"], imu["gZ"], imu["Y"])
+                        process_imu_data(imu["aX"], -1*imu["aY"], imu["aZ"], imu["gX"], imu["gY"], imu["gZ"], -1*imu["Y"])
                         update_plot()
                     elif data["mode"] == "scanning":
                         # Process ultra data for scanning mode
@@ -251,7 +321,7 @@ async def receive_data():
                     if ws_CMD:
                         try:
                             # Schedule the coroutine to send the stop command
-                            asyncio.run_coroutine_threadsafe(ws_CMD.send("S"), asyncio_loop)
+                            safe_run_coroutine(send_command("S"))  # Stop command
                         except Exception as e:
                             print(f"Error sending stop command: {e}")
                     await asyncio.sleep(2)  # Wait before retrying
@@ -263,6 +333,50 @@ async def receive_data():
             print(f"Failed to connect to data WebSocket: {e}. Retrying...")
             log_message(f"Failed to connect to data WebSocket: {e}. Retrying...")
             await asyncio.sleep(2)  # Wait before retrying
+
+
+def restart():
+    """Restart the application by resetting all variables and connections."""
+    global ws_CMD, ws_DATA, X, Y, Vx, Vy, yaw, gyroZ_filtered, ax_m, ay_m, quat, position, velocity
+    global x_data, y_data, kf, kf_yaw
+
+    try:
+        # Close WebSocket connections
+        if ws_CMD:
+            asyncio.run_coroutine_threadsafe(ws_CMD.close(), asyncio_loop)
+            ws_CMD = None
+        if ws_DATA:
+            asyncio.run_coroutine_threadsafe(ws_DATA.close(), asyncio_loop)
+            ws_DATA = None
+
+        # Reset Kalman filters
+        kf.x = np.array([0, 0, 0, 0])  # Reset state: [X, Y, Vx, Vy]
+        kf.P *= 1000  # Reset covariance matrix
+        kf_yaw.x = np.array([0, 0])  # Reset state: [yaw, yaw_rate]
+        kf_yaw.P *= 10  # Reset covariance matrix
+
+        # Reset state variables
+        X, Y = 0.0, 0.0
+        Vx, Vy = 0.0, 0.0
+        yaw = 0.0
+        gyroZ_filtered = 0.0
+        ax_m, ay_m = 0.0, 0.0
+        quat = np.array([1.0, 0.0, 0.0, 0.0])  # Reset quaternion
+        position = np.zeros(3)  # Reset position [x, y, z]
+        velocity = np.zeros(3)  # Reset velocity [vx, vy, vz]
+
+        # Reset plot data
+        clear_plot()
+
+        # Log the restart
+        log_message("Application restarted successfully.")
+        print("Application restarted successfully.")
+
+    except Exception as e:
+        log_message(f"Error during restart: {e}")
+        print(f"Error during restart: {e}")
+        messagebox.showerror("Restart Error", f"Failed to restart the application: {e}")
+
 
 async def connect_to_car():
     """Connect to the car's WebSocket server for commands and handle reconnection."""
@@ -327,7 +441,15 @@ async def send_command(command):
         except Exception as e:
             log_message(f"Error sending command: {e}")
     else:
-        messagebox.showwarning("Warning", "Not connected to the car!")
+        safe_show_warning("Warning", "Not connected to the car!")
+
+def safe_show_error(title, message):
+    """Show an error message in a thread-safe way."""
+    root.after(0, lambda: messagebox.showerror(title, message))
+
+def safe_show_warning(title, message):
+    """Show a warning message in a thread-safe way."""
+    root.after(0, lambda: messagebox.showwarning(title, message))
 
 async def send_speed():
     """Send the speed to the car."""
@@ -376,8 +498,9 @@ async def send_calibration_command():
 
 
 def log_message(message):
-    """Log a message in the GUI."""
-    log_text.insert(tk.END, message + "\n")
+    """Log a message in the GUI with a timestamp."""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_text.insert(tk.END, f"[{timestamp}] {message}\n")
     log_text.see(tk.END)
 
 def on_key_press(event):
@@ -385,15 +508,15 @@ def on_key_press(event):
     try:
         key = event.keysym
         if key == "Up":
-            asyncio.run_coroutine_threadsafe(send_command("F"),asyncio_loop)  # Forward
+            safe_run_coroutine(send_command("F"))  # Forward
         elif key == "Down":
-            asyncio.run_coroutine_threadsafe(send_command("B"),asyncio_loop)  # Backward
+            safe_run_coroutine(send_command("B"))  # Backward
         elif key == "Left":
-            asyncio.run_coroutine_threadsafe(send_command("L"),asyncio_loop)  # Left
+            safe_run_coroutine(send_command("L"))  # Left
         elif key == "Right":
-            asyncio.run_coroutine_threadsafe(send_command("R"),asyncio_loop)  # Right
+            safe_run_coroutine(send_command("R"))  # Right
         elif key == "space" or key == "c":
-            asyncio.run_coroutine_threadsafe(send_command("C"),asyncio_loop)  # Scan
+            safe_run_coroutine(send_command("C"))  # Scan
     except Exception as e:
         print(f"Error handling key press: {e}")
         log_message(f"Error handling key press: {e}")
@@ -401,7 +524,7 @@ def on_key_press(event):
 def on_key_release(event):
     """Handle key release events to stop the car."""
     try:
-        asyncio.run_coroutine_threadsafe(send_command("S"),asyncio_loop)  # Stop
+        safe_run_coroutine(send_command("S"))  # Stop
     except Exception as e:
         print(f"Error handling key release: {e}")
         log_message(f"Error handling key release: {e}")
@@ -440,45 +563,39 @@ def save_plot(filename="car_path_plot.png"):
         log_message(f"Error saving plot: {e}")
         messagebox.showerror("Save Plot", f"Failed to save plot: {e}")
 
-def smooth_data(data, window_size=5):
-    """Apply a moving average filter to smooth the data."""
-    smoothed = []
-    for i in range(len(data)):
-        start = max(0, i - window_size + 1)
-        smoothed.append(sum(data[start:i + 1]) / (i - start + 1))
-    return smoothed
-
-def average_scan(angles, distances, num_scans=3):
-    """Average multiple scans for each angle."""
-    averaged_distances = [0] * len(distances)
-    for _ in range(num_scans):
-        for i, distance in enumerate(distances):
-            averaged_distances[i] += distance
-    return [d / num_scans for d in averaged_distances]
-
-def remove_outliers(data, threshold=0.1):
-    """Remove outliers from the data."""
-    mean = sum(data) / len(data)
-    return [d if abs(d - mean) <= threshold * mean else mean for d in data]
-
-def process_scanning_data(angles, distances, num_scans=3, window_size=5):
-    """Process scanning data to improve accuracy."""
-    # Average multiple scans
-    # distances = average_scan(angles, distances, num_scans=num_scans)
-    # Smooth the data
-    distances = smooth_data(distances, window_size=window_size)
-    # Remove outliers
-    distances = remove_outliers(distances)
-    return distances
-
 def clear_plot():
     """Clear the plot and reset the data."""
-    global x_data, y_data
-    x_data, y_data = [0], [0]  # Reset the data
-    line_path.set_data([], [])  # Clear the line on the plot
-    ax.relim()  # Reset the plot limits
-    ax.autoscale_view()  # Autoscale the view
-    canvas.draw()  # Redraw the canvas
+    global x_data, y_data, scan_x_data, scan_y_data
+
+    # Reset the data
+    x_data, y_data = [0], [0]
+    scan_x_data, scan_y_data = [], []
+
+    # Clear the line on the plot
+    line_path.set_data([], [])
+    scan_line.set_data([], [])
+
+    # Remove all filled areas (polygons)
+    for collection in ax.collections[:]:
+        if isinstance(collection, PolyCollection):  # Check if it's a polygon
+            collection.remove()
+
+    # Clear the starting and current location markers
+    start_marker.set_data([], [])
+    current_marker.set_data([], [])
+
+    # Reset the heading arrow
+    heading_arrow.set_UVC(1, 0)  # Reset the arrow direction
+    heading_arrow.set_offsets([[x_data[0], y_data[0]]])  # Reset to the starting position
+
+    # Reset the plot limits
+    ax.relim()
+    ax.autoscale_view()
+
+    # Redraw the canvas
+    canvas.draw()
+
+    # Log the action
     log_message("Plot cleared.")
 
 # GUI setup
@@ -521,13 +638,14 @@ ax.set_xlabel("X Position (m)")
 ax.set_ylabel("Y Position (m)")
 ax.grid(True)
 line_path, = ax.plot([], [], 'bo-', label="Car Path")
+scan_line, = ax.plot([], [], 'r-', label="Scan Path")  # Red line for scan data
 # Initialize markers for starting and current locations
 start_marker, = ax.plot([], [], 'go', label="Start", markersize=10)  # Green marker for start
 current_marker, = ax.plot([], [], 'ro', label="Current", markersize=10)  # Red marker for current
 ax.legend()
 
 # Initialize heading arrow
-heading_arrow = ax.quiver(0, 0, 0, 0, angles='xy', scale_units='xy', scale=3, color='red', label="Heading")
+heading_arrow = ax.quiver(0, 0, 0, 0, angles='xy', scale_units='xy', scale=5, color='red', label="Heading")
 
 canvas = FigureCanvasTkAgg(fig, master=plot_frame)
 canvas_widget = canvas.get_tk_widget()
@@ -542,15 +660,16 @@ def safe_run_coroutine(coro):
     except Exception as e:
         print(f"Error running coroutine: {e}")
         log_message(f"Error running coroutine: {e}")
+        messagebox.showerror("Error", f"Failed to execute coroutine: {e}")
         
 # Connection frame
 connection_frame = tk.Frame(control_frame)
 connection_frame.pack(pady=10)
 
-connect_button = tk.Button(connection_frame, text="Connect", command=lambda: asyncio.run_coroutine_threadsafe(connect_to_car(), asyncio_loop))
+connect_button = tk.Button(connection_frame, text="Connect", command=lambda: safe_run_coroutine(connect_to_car()))
 connect_button.pack(side=tk.LEFT, padx=5)
 
-disconnect_button = tk.Button(connection_frame, text="Disconnect", command=lambda: lambda: asyncio.run_coroutine_threadsafe(send_command("DISCONNECT"), asyncio_loop))
+disconnect_button = tk.Button(connection_frame, text="Disconnect", command= lambda: safe_run_coroutine(close_all_connections_sync()))
 disconnect_button.pack(side=tk.LEFT, padx=5)
 
 # Add connection status labels
@@ -663,6 +782,12 @@ log_label.pack(anchor=tk.W)
 log_text = tk.Text(log_frame, height=10, width=50, state=tk.NORMAL)
 log_text.pack()
 
+# Restart Button
+restart_frame = tk.Frame(control_frame)
+restart_frame.pack(pady=5)
+
+restart_button = tk.Button(restart_frame, text="Restart", command=restart)
+restart_button.pack(side=tk.LEFT, padx=5)
 
 # Start the asyncio event loop in a separate thread
 asyncio_thread = threading.Thread(target=start_asyncio_loop, daemon=True)

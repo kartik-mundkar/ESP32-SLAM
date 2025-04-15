@@ -16,6 +16,7 @@ void handleCommandWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, s
         Serial.printf("Received command: %s\n", message.c_str());
 
         message.trim(); // Trim whitespace from the message
+
         // Handle "SPEED" command
         if (message.startsWith("SPEED:")) {
             int speed = message.substring(6).toInt();
@@ -36,13 +37,14 @@ void handleCommandWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, s
                 Serial.println("Error: Invalid angle value received. Must be between 0 and 180.");
             }
         }
+        // Handle "CALIBRATE" command
         else if (message.startsWith("CALIBRATE")) {
             car.stopMotor(); // Stop the car before calibration
-
             car.calibrateIMU(); // Calibrate the IMU
             Serial.println("IMU calibrated.");
         }
-        if (message.length() == 1) {
+        // Handle single-character commands
+        else if (message.length() == 1) {
             char command = message[0];
             if (commandQueue != nullptr) {
                 if (xQueueSend(commandQueue, &command, portMAX_DELAY) != pdPASS) {
@@ -52,7 +54,7 @@ void handleCommandWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, s
                 Serial.println("Error: Command queue is null.");
             }
         } else {
-            Serial.println("Error: Unrecognized command format.");
+            Serial.printf("Error: Unrecognized command format: %s\n", message.c_str());
         }
     }
     else if (type == WStype_DISCONNECTED) {
@@ -64,6 +66,7 @@ void handleCommandWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, s
         car.calibrateIMU(); // Calibrate the IMU when a client connects
     } else {
         Serial.println("Error: Unsupported WebSocket event type.");
+        Serial.printf("Event type: %d\n", type);
     }
 }
 

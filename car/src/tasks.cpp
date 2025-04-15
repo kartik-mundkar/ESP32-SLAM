@@ -31,12 +31,12 @@ void sendDataTask(void *parameter) {
 
     while (true) {
         if (car != nullptr && dataWebSocket != nullptr) {
-            String imuData = car->getCarData(0.05); // Get IMU and ultrasonic data
+            String imuData = car->getCarData(0.1); // Get IMU and ultrasonic data
             dataWebSocket->broadcastTXT(imuData);  // Send data via WebSocket
         } else {
             Serial.println("Error: Car or Data WebSocket reference is null.");
         }
-        vTaskDelay(50 / portTICK_PERIOD_MS); // Send data every 50 ms
+        vTaskDelay(100 / portTICK_PERIOD_MS); // Send data every 50 ms
     }
 }
 

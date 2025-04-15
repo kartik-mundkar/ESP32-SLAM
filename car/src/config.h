@@ -8,25 +8,25 @@
 #define MOTOR_ENB  2  // PWM for Right Motor
 #define MOTOR_IN1  18  // Left Motor Forward/Reverse
 #define MOTOR_IN2  19 
-#define MOTOR_IN3  21 // Right Motor Forward/Reverse
-#define MOTOR_IN4  22
+#define MOTOR_IN3  14 //32 //21 // Right Motor Forward/Reverse
+#define MOTOR_IN4  12 //33 //22
 
 //Ultrasonic sensor pin configuration
-#define TRIGGER_PIN 26
-#define ECHO_PIN 27
+#define TRIGGER_PIN 26 //33 //26
+#define ECHO_PIN 27 //32 //27
 
 
 //Servo pin configuration
 #define SERVO_PIN 13
 
 //imu pin configuration -> default SDA (21) and SCL (22) pins 
-#define SDA_PIN 32
-#define SCL_PIN 33 
+#define SDA_PIN 21 //SDA pin for IMU // previously 32
+#define SCL_PIN 22 //SCL pin for IMU  //33 
 #define I2C_CLOCK_SPEED 400000 
 
 //bluetooth configuration
-#define BLUETOOTH_NAME "ESP32-Car"
-#define BLUETOOTH_PIN "1234"
+// #define BLUETOOTH_NAME "ESP32-Car"
+// #define BLUETOOTH_PIN "1234"
 
 // //wifi-connection configuartion
 const char* ssid = "KARTIK 2824";

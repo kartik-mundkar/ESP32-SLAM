@@ -7,9 +7,9 @@ ServoMotor::ServoMotor(int pin) {
 void ServoMotor::begin() {
     servo.attach(servoPin);
     // lets show that servo is working by taking 0 to 180 degree sweep
-    for (int pos = 0; pos <= 180; pos += 1) { // goes from 0 degrees to 180 degrees
+    for (int pos = 0; pos <= 180; pos += 2) { // goes from 0 degrees to 180 degrees
         servo.write(pos);              // tell servo to go to position in variable 'pos'
-        delay(15);                     // waits 15ms for the servo to reach the position
+        delay(20);                     // waits 20ms for the servo to reach the position
     }
     servo.write(90); // Set initial position to 90 degrees
     delay(100); // Wait for 1 second to stabilize

@@ -21,9 +21,27 @@ void Car::initComponents() {
 void scanTask(void *parameter) {
     Car *car = (Car *)parameter; // Cast the parameter to a Car object
 
-    // Perform the scan
-    UltraData data = car->UltrasonicSensor::performScan(); // Perform the scan
-    String scanJson = car->UltrasonicSensor::getJson(data.angles, data.distances, data.size); // Convert the scan data to JSON
+    // Initialize variables for scanning
+    UltraData data;
+    bool scanComplete = false;
+
+
+    while (!scanComplete) {
+        // Perform one step of the scan
+        // data = car->UltrasonicSensor::performScanStep();
+        data = car->UltrasonicSensor::performScan();
+
+        // Check if the scan is complete
+        if (data.size > 0 && data.angles[data.size - 1] == SCAN_END) {
+            scanComplete = true;
+        }
+
+        // Yield to other tasks to avoid blocking
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+    }
+
+    // Convert the scan data to JSON
+    String scanJson = car->UltrasonicSensor::getJson(data.angles, data.distances, data.size);
     String jsonResponse = "{\"mode\":\"scanning\",\"timestamp\":" + String(millis()) + ",\"scan\":" + scanJson + "}";
 
     // Send the scan data via WebSocket
@@ -82,25 +100,9 @@ String Car::getCarData(float dt) {
     return "{\"mode\":\"moving\",\"timestamp\":" + String(millis()) + ",\"car\":{ \"imu\": "+ imuJson + ",\"ultra\":" + UltrasonicSensor::getDistance() + "}}";
 }
 
-// void Car::setSpeed(int speed) {
-//     if (speed >= 0 && speed <= 255) { // Ensure speed is within valid range
-//         this->speed = speed;
-//         Motor::setSpeed(speed); // Set motor speed
-//     } else {
-//         Serial.println("Invalid speed value. Speed must be between 0 and 255.");
-//     }
-// }
 
 void Car::setServoAngle(int angle) {
     UltrasonicSensor::setAngle(angle); // Use the UltrasonicSensor's setAngle method
     Serial.printf("Servo angle updated to: %d\n", angle);
 }
 
-void Car::handleScan() {
-    UltraData data = UltrasonicSensor::performScan(); // Perform the scan
-    String scanJson = UltrasonicSensor::getJson(data.angles, data.distances, data.size); // Convert the scan data to JSON
-    String jsonResponse = "{\"mode\":\"scanning\",\"timestamp\":" + String(millis()) + ",\"scan\":" + scanJson + "}";
-    webSocket->broadcastTXT(jsonResponse); // Broadcast the scan data
-    Serial.println("Scan data sent: " + jsonResponse); // Print the scan data to the Serial Monitor
-    Serial.println("Scan complete.");
-}

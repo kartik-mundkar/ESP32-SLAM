@@ -8,7 +8,7 @@ IMUSensor::IMUSensor(int imuPins[]){
     this->SDA = imuPins[0]; // I2C SDA pin
     this->SCL = imuPins[1]; // I2C SCL pin
     Wire.begin(SDA, SCL); // Initialize I2C with custom SDA and SCL pins
-    Wire.setClock(200000); // Set I2C speed to 200kHz (default is 100kHz)
+    // Wire.setClock(200000); // Set I2C speed to 200kHz (default is 100kHz)
     Serial.println("IMU Sensor Initialized");
 }
 
@@ -46,17 +46,17 @@ void IMUSensor::I2CwriteByte(uint8_t Address, uint8_t Register, uint8_t Data)
 void IMUSensor::applyLowPassFilter(IMUData &data)
 {
     static float prevAccel[3] = {0, 0, 0};
-    static float prevGyro[3] = {0, 0, 0};
+    // static float prevGyro[3] = {0, 0, 0};
 
     // Apply LPF
     for (int i = 0; i < 3; i++)
     {
         data.accel[i] = ALPHA * data.accel[i] + (1 - ALPHA) * prevAccel[i];
-        data.gyro[i] = ALPHA * data.gyro[i] + (1 - ALPHA) * prevGyro[i];
+        // data.gyro[i] = ALPHA * data.gyro[i] + (1 - ALPHA) * prevGyro[i];
 
         // Update previous values
         prevAccel[i] = data.accel[i];
-        prevGyro[i] = data.gyro[i];
+        // prevGyro[i] = data.gyro[i];
     }
 }
 
@@ -64,8 +64,8 @@ void IMUSensor::applyKalmanFilter(IMUData &data)
 {
     static float x[3] = {0, 0, 0}; // Estimated state
     static float P[3] = {1, 1, 1}; // Error covariance
-    float Q = 0.001;               // Process noise covariance
-    float R = 0.01;                // Measurement noise covariance
+    float Q = 0.005;               // Process noise covariance
+    float R = 0.02;                // Measurement noise covariance
 
     for (int i = 0; i < 3; i++)
     {
@@ -105,61 +105,62 @@ void IMUSensor::applyHighPassFilter(IMUData &data)
 void IMUSensor::applyMedianFilter(IMUData &data)
 {
     static float accelBuffer[5][3] = {0};
-    static float gyroBuffer[5][3] = {0};
+    // static float gyroBuffer[5][3] = {0};
 
-    // Store new sensor readings in buffer
-    for (int i = 0; i < 3; i++)
-    {
-        accelBuffer[4][i] = data.accel[i];
-        gyroBuffer[4][i] = data.gyro[i];
-    }
-
-    // Shift old values in the buffer
-    for (int i = 0; i < 4; i++)
-    {
-        for (int j = 0; j < 3; j++)
-        {
-            accelBuffer[i][j] = accelBuffer[i + 1][j];
-            gyroBuffer[i][j] = gyroBuffer[i + 1][j];
+    // Shift old values in the buffer (from end to beginning)
+    for (int i = 3; i >= 0; i--) { // Shift only the first 4 elements
+        for (int j = 0; j < 3; j++) {
+            accelBuffer[i + 1][j] = accelBuffer[i][j];
+            // gyroBuffer[i + 1][j] = gyroBuffer[i][j];
         }
     }
 
+    // Store new sensor readings in the first position
+    for (int i = 0; i < 3; i++) {
+        accelBuffer[0][i] = data.accel[i];
+        // gyroBuffer[0][i] = data.gyro[i];
+    }
+
     // Apply median filter to accelerometer and gyroscope data
-    for (int i = 0; i < 3; i++)
-    {
+    for (int i = 0; i < 3; i++) {
         data.accel[i] = median(accelBuffer, i); // Find median for accel data
-        data.gyro[i] = median(gyroBuffer, i);   // Find median for gyro data
+        // data.gyro[i] = median(gyroBuffer, i);   // Find median for gyro data
     }
 }
 
 // Helper function to calculate median of 5 values
-float IMUSensor::median(float buffer[5][3], int index)
+float IMUSensor::median(float buffer[7][3], int index)
 {
-    float values[5];
+    float values[7];
     for (int i = 0; i < 5; i++)
     {
         values[i] = buffer[i][index];
     }
-    std::sort(values, values + 5);
+    std::sort(values, values + 5); // Sort the values
     return values[2]; // Return the middle value (the median)
 }
 
-void IMUSensor::calibrateIMU()
-{
-    int numSamples = 500;
+void IMUSensor::calibrateIMU() {
+    int numSamples = 100; // Increase the number of samples
     float gyroSum[3] = {0}, accelSum[3] = {0};
-
     uint8_t Buf[14];
-    I2Cread(MPU9250_ADDRESS, 0x3B, 14, Buf);
-    for (int i = 0; i < numSamples; i++)
-    {
+
+    // Discard initial unstable readings
+    for (int i = 0; i < 10; i++) {
+        I2Cread(MPU9250_ADDRESS, 0x3B, 14, Buf);
+        delay(50);
+    }
+
+    // Collect samples
+    for (int i = 0; i < numSamples; i++) {
+        I2Cread(MPU9250_ADDRESS, 0x3B, 14, Buf);
 
         int16_t axx = -(Buf[0] << 8 | Buf[1]);
         int16_t ayy = -(Buf[2] << 8 | Buf[3]);
-        int16_t azz = Buf[4] << 8 | Buf[5];
-        int16_t gxx = -(Buf[8] << 8 | Buf[9]);
-        int16_t gyy = -(Buf[10] << 8 | Buf[11]);
-        int16_t gzz = Buf[12] << 8 | Buf[13];
+        int16_t azz = (Buf[4] << 8 | Buf[5]);
+        int16_t gxx = (Buf[8] << 8 | Buf[9]);
+        int16_t gyy = (Buf[10] << 8 | Buf[11]);
+        int16_t gzz = -(Buf[12] << 8 | Buf[13]);
 
         float ax = axx * g / acc_sensitivity;
         float ay = ayy * g / acc_sensitivity;
@@ -175,16 +176,21 @@ void IMUSensor::calibrateIMU()
         gyroSum[1] += gy;
         gyroSum[2] += gz;
 
-        delay(20);
+        delay(50); // Increase delay for stability
     }
 
-    for (int i = 0; i < 3; i++)
-    {
+    // Calculate biases
+    for (int i = 0; i < 3; i++) {
         gyroBias[i] = gyroSum[i] / numSamples;
         accelBias[i] = accelSum[i] / numSamples;
     }
 
+    // Adjust Z-axis accelerometer bias for gravity
     accelBias[2] -= g;
+
+    // Print biases for debugging
+    // Serial.printf("Accel Bias: X=%.2f, Y=%.2f, Z=%.2f\n", accelBias[0], accelBias[1], accelBias[2]);
+    // Serial.printf("Gyro Bias: X=%.2f, Y=%.2f, Z=%.2f\n", gyroBias[0], gyroBias[1], gyroBias[2]);
 }
 
 IMUData IMUSensor::readSensor(float dt)
@@ -195,10 +201,10 @@ IMUData IMUSensor::readSensor(float dt)
     IMUData data;
     int16_t ax = -(Buf[0] << 8 | Buf[1]);
     int16_t ay = -(Buf[2] << 8 | Buf[3]);
-    int16_t az = Buf[4] << 8 | Buf[5];
-    int16_t gx = -(Buf[8] << 8 | Buf[9]);
-    int16_t gy = -(Buf[10] << 8 | Buf[11]);
-    int16_t gz = Buf[12] << 8 | Buf[13];
+    int16_t az = (Buf[4] << 8 | Buf[5]);
+    int16_t gx = (Buf[8] << 8 | Buf[9]);
+    int16_t gy = (Buf[10] << 8 | Buf[11]);
+    int16_t gz = -(Buf[12] << 8 | Buf[13]);
 
     data.accel[0] = ax * g / acc_sensitivity - accelBias[0];
     data.accel[1] = ay * g / acc_sensitivity - accelBias[1];
@@ -212,10 +218,10 @@ IMUData IMUSensor::readSensor(float dt)
     data.gyro[1] = gy;
     data.gyro[2] = gz;
 
-    applyLowPassFilter(data);
-    applyKalmanFilter(data);
-    applyHighPassFilter(data); // Apply High-Pass Filter
     applyMedianFilter(data);   // Apply Median Filter
+    applyLowPassFilter(data);
+    applyHighPassFilter(data); // Apply High-Pass Filter
+    applyKalmanFilter(data);
 
     roll += round(data.gyro[0] * 100) / 100;
     pitch += round(data.gyro[1] * 100) / 100;
